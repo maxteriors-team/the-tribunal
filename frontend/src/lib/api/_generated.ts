@@ -20240,6 +20240,8 @@ export interface components {
              * @default 0
              */
             safety_stock: number;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /** Supplier Name */
@@ -20333,6 +20335,8 @@ export interface components {
              * @default 0
              */
             safety_stock: number;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /** Supplier Name */
@@ -20370,9 +20374,9 @@ export interface components {
          * InventoryItemUpdate
          * @description Update a tracked item (all fields optional).
          *
-         *     ``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and
-         *     ``catalog_item_id`` are cleared by an explicit ``null`` (the service checks
-         *     ``model_fields_set``); nothing else could un-manage an item once managed.
+         *     ``reorder_point``, ``reorder_quantity``, ``lead_time_days``,
+         *     ``catalog_item_id`` and ``service_category`` are cleared by an explicit
+         *     ``null`` (the service checks ``model_fields_set``).
          */
         InventoryItemUpdate: {
             /** Catalog Item Id */
@@ -20391,6 +20395,8 @@ export interface components {
             reorder_quantity?: number | null;
             /** Safety Stock */
             safety_stock?: number | null;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /** Supplier Name */
@@ -32999,6 +33005,11 @@ export interface components {
             name: string;
             /** Phone */
             phone?: string | null;
+            /**
+             * Scoreboard Enabled
+             * @default true
+             */
+            scoreboard_enabled: boolean;
             /** Skills */
             skills?: string[];
             /** User Id */
@@ -33053,6 +33064,8 @@ export interface components {
             name: string;
             /** Phone */
             phone: string | null;
+            /** Scoreboard Enabled */
+            scoreboard_enabled: boolean;
             /** Skills */
             skills: string[];
             /**
@@ -33227,6 +33240,8 @@ export interface components {
             name?: string | null;
             /** Phone */
             phone?: string | null;
+            /** Scoreboard Enabled */
+            scoreboard_enabled?: boolean | null;
             /** Skills */
             skills?: string[] | null;
             /** User Id */

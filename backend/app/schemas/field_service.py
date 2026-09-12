@@ -199,6 +199,7 @@ class TechnicianCreate(BaseModel):
     user_id: int | None = None
     color: str = Field(default="#0ea5e9", pattern=HEX_COLOR)
     is_active: bool = True
+    scoreboard_enabled: bool = True
 
 
 class TechnicianUpdate(BaseModel):
@@ -213,6 +214,7 @@ class TechnicianUpdate(BaseModel):
     user_id: int | None = None
     color: str | None = Field(None, pattern=HEX_COLOR)
     is_active: bool | None = None
+    scoreboard_enabled: bool | None = None
 
 
 class TechnicianResponse(BaseModel):
@@ -229,6 +231,7 @@ class TechnicianResponse(BaseModel):
     skills: list[str]
     color: str
     is_active: bool
+    scoreboard_enabled: bool
     created_at: datetime
     updated_at: datetime
 

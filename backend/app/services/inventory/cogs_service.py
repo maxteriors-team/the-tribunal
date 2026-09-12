@@ -197,13 +197,17 @@ class COGSService:
                 for item_id, name, value, qty in item_rows
             ]
         elif group_by == "service_category":
+            category = func.coalesce(
+                InventoryItem.service_category,
+                CatalogItem.service_category,
+            )
             category_rows = (
                 await self.db.execute(
-                    select(CatalogItem.service_category, cost, quantity)
+                    select(category, cost, quantity)
                     .join(InventoryItem, InventoryItem.id == InventoryLedgerEntry.item_id)
                     .outerjoin(CatalogItem, CatalogItem.id == InventoryItem.catalog_item_id)
                     .where(*base_filters)
-                    .group_by(CatalogItem.service_category)
+                    .group_by(category)
                 )
             ).all()
             slices = [

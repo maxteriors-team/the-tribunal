@@ -196,6 +196,8 @@ class InventoryItem(Base, WorkspaceScoped):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     sku: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Free-form to match CatalogItem.service_category and each workspace's trades.
+    service_category: Mapped[str | None] = mapped_column(String(60), nullable=True)
     # "each", "gallon", "box", "ft" — a label the UI renders, not a unit the
     # backend converts between. No unit maths, so no conversion table.
     unit_of_measure: Mapped[str] = mapped_column(
