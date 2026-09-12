@@ -28,6 +28,8 @@ export type JobVisitCreate = Schemas["JobVisitCreate"];
 export type JobVisitUpdate = Schemas["JobVisitUpdate"];
 export type JobPricing = Schemas["JobPricingResponse"];
 export type JobPricingReplace = Schemas["JobPricingReplace"];
+export type JobInvoiceCreate = Schemas["JobInvoiceCreate"];
+export type JobInvoice = Schemas["InvoiceDetailResponse"];
 export type CustomerReminderResult = Schemas["CustomerReminderResponse"];
 
 // Field execution: time tracking, expenses, profitability.
@@ -167,6 +169,22 @@ export const jobsApi = {
     body: JobPricingReplace,
   ): Promise<JobPricing> =>
     apiClient.put("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  /**
+   * Bill a completed job by copying its priced scope onto a draft invoice.
+   *
+   * Rejected with 409 when the job is not completed, has no priced scope, or is
+   * already linked to an invoice -- the last is what prevents double-billing.
+   */
+  createInvoice: (
+    workspaceId: string,
+    jobId: string,
+    body: JobInvoiceCreate = {},
+  ): Promise<JobInvoice> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/invoice", {
       path: { workspace_id: workspaceId, job_id: jobId },
       body,
     }),

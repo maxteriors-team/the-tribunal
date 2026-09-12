@@ -27,7 +27,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import inspect, select, update
+from sqlalchemy import func, inspect, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -90,6 +90,34 @@ logger = structlog.get_logger()
 _ISSUED_STATUSES = frozenset({"sent", "paid", "partial", "overdue"})
 
 
+def invoice_balance_due(invoice: Invoice) -> float:
+    """Money still owed on an invoice, floored at zero.
+
+    Void invoices owe nothing regardless of amounts: voiding is how an operator
+    cancels a bill, so counting a void invoice's total as outstanding would
+    inflate every collections figure.
+    """
+    if invoice.status == "void":
+        return 0.0
+    balance = float(invoice.total or 0) - float(invoice.amount_paid or 0)
+    return round(balance, 2) if balance > 0 else 0.0
+
+
+def invoice_days_overdue(invoice: Invoice, *, today: date | None = None) -> int | None:
+    """Whole days past the due date for an invoice that still owes money.
+
+    ``None`` means "not overdue" -- unsent, undated, settled, void, or simply not
+    yet due. Only sent invoices count: a draft sitting past an internal due date
+    was never given to the customer, so calling them late is wrong.
+    """
+    if invoice.sent_at is None or invoice.due_date is None:
+        return None
+    if invoice_balance_due(invoice) <= 0:
+        return None
+    elapsed = ((today or date.today()) - invoice.due_date).days
+    return elapsed if elapsed > 0 else None
+
+
 def serialize_invoice[R: InvoiceResponse](
     invoice: Invoice,
     model: type[R],
@@ -105,6 +133,9 @@ def serialize_invoice[R: InvoiceResponse](
     if "contact" not in inspect(invoice).unloaded:
         contact = invoice.contact
         response.contact_name = contact.full_name if contact else None
+
+    response.balance_due = invoice_balance_due(invoice)
+    response.days_overdue = invoice_days_overdue(invoice)
 
     if receipt_job is None:
         response.receipt_delivery = (
@@ -479,34 +510,63 @@ class InvoiceService:
         page_size: int = 50,
         status: str | None = None,
         contact_id: int | None = None,
+        unpaid_only: bool = False,
     ) -> PaginatedInvoices:
         """List a workspace's invoices, newest first, with optional filters.
 
         The bill-to contact is eager loaded so each row can name whose invoice it
         is. ``selectinload`` issues one extra query for the whole page rather than
         one per row, so naming 100 invoices costs 2 queries, not 101.
+
+        ``unpaid_only`` answers "who still owes us money" from the *amounts*
+        rather than from ``status``. That column is only re-derived when an
+        invoice is mutated, so an untouched invoice that drifts past its due date
+        still reads ``sent`` -- filtering on status would hide exactly the debts
+        an operator is looking for. Void invoices are excluded: voiding is how a
+        bill gets cancelled.
         """
+        filters = [Invoice.workspace_id == workspace_id]
+        if status:
+            filters.append(Invoice.status == status)
+        if contact_id is not None:
+            filters.append(Invoice.contact_id == contact_id)
+        if unpaid_only:
+            filters.append(Invoice.status != "void")
+            filters.append(Invoice.total > Invoice.amount_paid)
+
         query = (
             select(Invoice)
-            .where(Invoice.workspace_id == workspace_id)
+            .where(*filters)
             .options(selectinload(Invoice.contact))
+            .order_by(Invoice.created_at.desc(), Invoice.id.desc())
         )
-        if status:
-            query = query.where(Invoice.status == status)
-        if contact_id is not None:
-            query = query.where(Invoice.contact_id == contact_id)
-        query = query.order_by(Invoice.created_at.desc(), Invoice.id.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         jobs = await self._latest_receipt_jobs(
             workspace_id, [invoice.id for invoice in result.items]
         )
-        return result.build_response(
+        response = result.build_response(
             item_mapper=lambda invoice: serialize_invoice(
                 invoice, InvoiceResponse, receipt_job=jobs.get(invoice.id)
             ),
             response_builder=PaginatedInvoices,
         )
+        response.outstanding_total = await self._outstanding_total(filters)
+        return response
+
+    async def _outstanding_total(self, filters: list[Any]) -> float:
+        """Sum unpaid balances across every invoice matching ``filters``.
+
+        Summed in the database over the whole filtered set, not over the current
+        page: "how much are we owed" must not shrink as the operator pages
+        through. Per-row balances are floored at zero so an overpaid invoice
+        cannot offset someone else's debt.
+        """
+        balance = func.greatest(Invoice.total - Invoice.amount_paid, 0)
+        total = await self.db.scalar(
+            select(func.coalesce(func.sum(balance), 0)).where(*filters, Invoice.status != "void")
+        )
+        return round(float(total or 0), 2)
 
     async def create_invoice(
         self,

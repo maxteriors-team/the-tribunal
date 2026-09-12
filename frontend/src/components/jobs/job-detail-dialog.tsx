@@ -532,6 +532,8 @@ export function JobDetailDialog({
                 readOnly={readOnly}
                 canViewPricing={canViewPricing}
                 canEditPricing={canEditPricing}
+                jobStatus={job.status}
+                invoiceId={job.invoice_id}
               />
             </TabsContent>
             <TabsContent value="field-work" className="space-y-5 pt-2">

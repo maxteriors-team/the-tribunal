@@ -63,10 +63,12 @@ from app.schemas.inventory import (
     JobMaterialCreate,
     JobMaterialsResponse,
 )
+from app.schemas.invoice import InvoiceDetailResponse
 from app.schemas.job import (
     JobAssignRequest,
     JobCreate,
     JobInstallationPlanResponse,
+    JobInvoiceCreate,
     JobListResponse,
     JobPricingReplace,
     JobPricingResponse,
@@ -635,6 +637,33 @@ async def replace_job_pricing(
         membership.workspace_id,
         payload.tax_rate,
         [item.model_dump() for item in payload.items],
+    )
+
+
+@router.post(
+    "/{job_id}/invoice",
+    response_model=InvoiceDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_invoice_from_job(
+    job_id: uuid.UUID,
+    payload: JobInvoiceCreate,
+    membership: CanWriteBilling,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> InvoiceDetailResponse:
+    """Bill a completed job by copying its priced scope onto a draft invoice.
+
+    Requires billing write access, like every other money-moving route here.
+    Returns 409 when the job is not completed, has no priced scope, or is already
+    linked to an invoice -- the last guard is what stops a double-click, or two
+    operators on the same job, from billing the customer twice.
+    """
+    return await JobService(db).create_invoice_from_job(
+        job_id,
+        membership.workspace_id,
+        created_by_id=current_user.id,
+        due_date=payload.due_date,
     )
 
 

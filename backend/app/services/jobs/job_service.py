@@ -23,7 +23,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, cast
 
@@ -54,6 +54,7 @@ from app.models.lighting_project import LightingProject
 from app.models.quote import Quote, QuoteLineItem
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.schemas.invoice import InvoiceCreate, InvoiceDetailResponse, InvoiceLineItemCreate
 from app.schemas.job import (
     InstallationPlanFixture,
     InstallationPlanWorksheetRow,
@@ -256,6 +257,74 @@ class JobService:
         self.db.add_all(replacements)
         await self.db.flush()
         return self._pricing_response(job, replacements)
+
+    async def create_invoice_from_job(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        created_by_id: int | None = None,
+        due_date: date | None = None,
+    ) -> InvoiceDetailResponse:
+        """Bill a completed job: copy its priced scope onto a new draft invoice.
+
+        Deliberately conservative about *when* this is allowed, because an invoice
+        is a customer-facing money document:
+
+        - Only a ``completed`` job can be billed. Invoicing work that is still
+          scheduled or in progress bills for something that has not happened.
+        - A job already linked to an invoice is rejected rather than silently
+          creating a second one. Double-billing a customer is far worse than
+          making the operator look at the invoice that already exists.
+        - The job must have priced line items. An empty invoice is never what the
+          operator meant, and a zero-total invoice reads as "paid" downstream.
+
+        Job tax is a *rate* (percent) while invoices carry a resolved tax
+        ``amount``, so the rate is applied here over the taxable rows only --
+        reusing ``_pricing_response`` so the figure the operator approved on the
+        job screen is exactly what lands on the invoice.
+        """
+        job = await self._get_job_for_children(job_id, workspace_id)
+
+        if job.status != JobStatus.COMPLETED:
+            raise ConflictError("Only a completed job can be invoiced")
+        if job.invoice_id is not None:
+            raise ConflictError("This job is already linked to an invoice")
+
+        pricing = await self.get_pricing(job_id, workspace_id)
+        if not pricing.items:
+            raise ConflictError("Add priced line items to the job before invoicing it")
+
+        # Local import: invoices -> opportunities -> jobs is an existing import
+        # chain, so importing InvoiceService at module level closes that loop and
+        # breaks app startup.
+        from app.services.invoices import InvoiceService
+
+        invoice = await InvoiceService(self.db).create_invoice(
+            workspace_id,
+            InvoiceCreate(
+                contact_id=job.contact_id,
+                tax_amount=float(pricing.tax),
+                discount_amount=float(pricing.discount),
+                due_date=due_date,
+                notes=job.description,
+                line_items=[
+                    InvoiceLineItemCreate(
+                        name=item.name,
+                        description=item.description,
+                        quantity=float(item.quantity),
+                        unit_price=float(item.unit_price),
+                    )
+                    for item in pricing.items
+                ],
+            ),
+            created_by_id=created_by_id,
+            commit=False,
+        )
+        # Links the job to its bill, which is also what blocks a second invoice.
+        job.invoice_id = invoice.id
+        await self.db.flush()
+        return invoice
 
     @staticmethod
     def _pricing_response(job: Job, items: Sequence[JobLineItem]) -> JobPricingResponse:

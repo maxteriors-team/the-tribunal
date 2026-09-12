@@ -48,10 +48,16 @@ async def list_invoices(
     membership: CanReadBilling,
     invoice_status: Annotated[str | None, Query(alias="status")] = None,
     contact_id: Annotated[int | None, Query()] = None,
+    unpaid_only: Annotated[bool, Query()] = False,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> PaginatedInvoices:
-    """List invoices in a workspace, newest first, with optional filters."""
+    """List invoices in a workspace, newest first, with optional filters.
+
+    ``unpaid_only`` drives the collections view. It selects on outstanding
+    amounts rather than on ``status``, which is only refreshed when an invoice is
+    edited and so goes stale on exactly the overdue invoices that matter most.
+    """
     service = InvoiceService(db)
     return await service.list_invoices(
         workspace_id,
@@ -59,6 +65,7 @@ async def list_invoices(
         page_size=page_size,
         status=invoice_status,
         contact_id=contact_id,
+        unpaid_only=unpaid_only,
     )
 
 

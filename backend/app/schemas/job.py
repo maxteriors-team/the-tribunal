@@ -7,7 +7,7 @@ job on their calendar. Status is derived/maintained server-side by
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -159,6 +159,17 @@ class JobPricingResponse(BaseModel):
     discount: Decimal = Decimal("0.00")
     tax: Decimal
     total: Decimal
+
+
+class JobInvoiceCreate(BaseModel):
+    """Options for billing a completed job.
+
+    Everything else (bill-to contact, line items, tax) is copied from the job's
+    approved pricing rather than accepted from the client, so the invoice cannot
+    disagree with the scope the operator signed off on.
+    """
+
+    due_date: date | None = None
 
 
 class JobAssignRequest(BaseModel):

@@ -67,6 +67,15 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
   receipt_delivery: InvoiceReceiptDelivery;
+  /**
+   * Money still owed, server-computed per response. Zero on paid/void.
+   *
+   * Optional because older cached payloads and hand-built fixtures predate it;
+   * read it as `invoice.balance_due ?? 0`.
+   */
+  balance_due?: number;
+  /** Whole days past due while money is still owed; null when not overdue. */
+  days_overdue?: number | null;
   payments?: InvoicePayment[];
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */
   line_items?: InvoiceLineItem[];
