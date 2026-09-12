@@ -101,9 +101,27 @@ class EmailCampaignWorker(BaseCampaignWorker):
             await db.commit()
             return
 
+        now_tick = datetime.now(UTC)
         for campaign_contact in pending:
             contact = campaign_contact.contact
             to_email = (contact.email or "").strip() if contact else ""
+
+            # Opt-out is re-checked here, not just at enrollment. Enrollment
+            # filters on ``email_opted_out_at`` once (audience_service
+            # ``_is_channel_eligible``), but a contact can unsubscribe — via this
+            # campaign, another campaign, or automation mail — while these rows sit
+            # PENDING. Sending queued mail after that is the CAN-SPAM violation
+            # this check exists to prevent. Read off the eager-loaded contact
+            # rather than calling ``email_suppressed`` so 50 sends stay one query.
+            if contact is not None and contact.email_opted_out_at is not None:
+                campaign_contact.status = CampaignContactStatus.OPTED_OUT
+                campaign_contact.opted_out = True
+                campaign_contact.opted_out_at = campaign_contact.opted_out_at or now_tick
+                campaign_contact.suppressed_reason = "email_opted_out"
+                campaign_contact.suppressed_at = now_tick
+                campaign.contacts_opted_out += 1
+                log.info("Email campaign contact suppressed", contact_id=contact.id)
+                continue
 
             if not to_email:
                 # No address to send to — a send failure, not a provider bounce
