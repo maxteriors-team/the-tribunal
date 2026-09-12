@@ -582,3 +582,40 @@ async def test_anytime_appointment_reminder_omits_synthetic_noon(
     assert "Thursday, August 20 at any time &middot; Sparkle Exteriors" in params["html"]
     assert "12:00 PM" not in params["subject"]
     assert "12:00 PM" not in params["html"]
+
+
+@pytest.mark.asyncio
+async def test_campaign_email_sets_one_click_unsubscribe_headers(
+    fake_resend: _FakeResend,
+) -> None:
+    """Bulk mail needs RFC 8058 headers, not just the visible footer.
+
+    Gmail and Yahoo require one-click unsubscribe from bulk senders, and campaign
+    mail is the highest-volume path in the product. ``send_automation_email``
+    already sets these; omitting them here is what puts the sending domain in
+    spam at exactly the volume where it matters.
+    """
+    await email.send_campaign_email(
+        to_email="customer@example.com",
+        subject="Spring offer",
+        body="Book now.",
+        unsubscribe_url="https://go.example.com/u/abc",
+    )
+
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert params["headers"]["List-Unsubscribe"] == "<https://go.example.com/u/abc>"
+    assert params["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
+@pytest.mark.asyncio
+async def test_campaign_email_omits_unsubscribe_headers_without_url(
+    fake_resend: _FakeResend,
+) -> None:
+    """No URL means no header: a List-Unsubscribe pointing nowhere is worse."""
+    await email.send_campaign_email(
+        to_email="customer@example.com",
+        subject="Spring offer",
+        body="Book now.",
+    )
+
+    assert "headers" not in fake_resend.Emails.send_async.await_args.args[0]
