@@ -5815,6 +5815,10 @@ export interface paths {
         /**
          * List Invoices
          * @description List invoices in a workspace, newest first, with optional filters.
+         *
+         *     ``unpaid_only`` drives the collections view. It selects on outstanding
+         *     amounts rather than on ``status``, which is only refreshed when an invoice is
+         *     edited and so goes stale on exactly the overdue invoices that matter most.
          */
         get: operations["list_invoices_api_v1_workspaces__workspace_id__invoices_get"];
         put?: never;
@@ -6337,6 +6341,31 @@ export interface paths {
         get: operations["get_job_inventory_plan_api_v1_workspaces__workspace_id__jobs__job_id__inventory_plan_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Invoice From Job
+         * @description Bill a completed job by copying its priced scope onto a draft invoice.
+         *
+         *     Requires billing write access, like every other money-moving route here.
+         *     Returns 409 when the job is not completed, has no priced scope, or is already
+         *     linked to an invoice -- the last guard is what stops a double-click, or two
+         *     operators on the same job, from billing the customer twice.
+         */
+        post: operations["create_invoice_from_job_api_v1_workspaces__workspace_id__jobs__job_id__invoice_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -20836,6 +20865,11 @@ export interface components {
         InvoiceDetailResponse: {
             /** Amount Paid */
             amount_paid: number;
+            /**
+             * Balance Due
+             * @default 0
+             */
+            balance_due: number;
             /** Contact Id */
             contact_id?: number | null;
             /** Contact Name */
@@ -20847,6 +20881,8 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /** Days Overdue */
+            days_overdue?: number | null;
             /** Discount Amount */
             discount_amount: number;
             /** Due Date */
@@ -21086,6 +21122,11 @@ export interface components {
         InvoiceResponse: {
             /** Amount Paid */
             amount_paid: number;
+            /**
+             * Balance Due
+             * @default 0
+             */
+            balance_due: number;
             /** Contact Id */
             contact_id?: number | null;
             /** Contact Name */
@@ -21097,6 +21138,8 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /** Days Overdue */
+            days_overdue?: number | null;
             /** Discount Amount */
             discount_amount: number;
             /** Due Date */
@@ -21155,6 +21198,11 @@ export interface components {
         InvoiceSendResponse: {
             /** Amount Paid */
             amount_paid: number;
+            /**
+             * Balance Due
+             * @default 0
+             */
+            balance_due: number;
             /** Contact Id */
             contact_id?: number | null;
             /** Contact Name */
@@ -21166,6 +21214,8 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /** Days Overdue */
+            days_overdue?: number | null;
             /** Delivered To */
             delivered_to?: string | null;
             /**
@@ -21469,6 +21519,18 @@ export interface components {
             job_id: string;
             /** Job Status */
             job_status: string;
+        };
+        /**
+         * JobInvoiceCreate
+         * @description Options for billing a completed job.
+         *
+         *     Everything else (bill-to contact, line items, tax) is copied from the job's
+         *     approved pricing rather than accepted from the client, so the invoice cannot
+         *     disagree with the scope the operator signed off on.
+         */
+        JobInvoiceCreate: {
+            /** Due Date */
+            due_date?: string | null;
         };
         /**
          * JobLineItemSummary
@@ -25749,6 +25811,11 @@ export interface components {
         PaginatedInvoices: {
             /** Items */
             items: components["schemas"]["InvoiceResponse"][];
+            /**
+             * Outstanding Total
+             * @default 0
+             */
+            outstanding_total: number;
             /** Page */
             page: number;
             /** Page Size */
@@ -46907,6 +46974,7 @@ export interface operations {
             query?: {
                 status?: string | null;
                 contact_id?: number | null;
+                unpaid_only?: boolean;
                 page?: number;
                 page_size?: number;
             };
@@ -48008,6 +48076,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobInventoryPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invoice_from_job_api_v1_workspaces__workspace_id__jobs__job_id__invoice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobInvoiceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */

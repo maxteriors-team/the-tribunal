@@ -179,6 +179,15 @@ class InvoiceResponse(BaseModel):
     contact_name: str | None = None
     receipt_delivery: InvoiceReceiptDelivery = Field(default_factory=InvoiceReceiptDelivery)
 
+    # Outstanding balance and lateness, computed per response rather than stored.
+    # ``status`` is only re-derived when an invoice is *mutated*, so an untouched
+    # invoice that sails past its due date keeps a stale ``sent`` status forever.
+    # A collections view driven off that column silently under-reports who is
+    # late, so these are derived from ``total``/``amount_paid``/``due_date`` at
+    # read time and are always current.
+    balance_due: float = 0.0
+    days_overdue: int | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -257,6 +266,11 @@ class PaginatedInvoices(BaseModel):
     page: int
     page_size: int
     pages: int
+
+    # Money still owed across every invoice matching the filter, not just this
+    # page -- "how much are we owed" is a question about the whole book, and a
+    # page-local sum would quietly shrink as the operator pages through it.
+    outstanding_total: float = 0.0
 
 
 class InvoicePaymentLinkResponse(BaseModel):

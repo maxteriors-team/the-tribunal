@@ -28,6 +28,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -103,7 +104,8 @@ function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) 
   const { page, pageSize, setPage, reset } = usePagination({ initialPageSize: 100 });
   const [statusFilter, setStatusFilter] = useState("all");
   const [contactId, setContactId] = useState("");
-  const hasFilters = statusFilter !== "all" || contactId !== "";
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
+  const hasFilters = statusFilter !== "all" || contactId !== "" || unpaidOnly;
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [recordingPayment, setRecordingPayment] = useState<Invoice | null>(null);
@@ -114,6 +116,7 @@ function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) 
     page_size: pageSize,
     status: statusFilter === "all" ? undefined : statusFilter,
     contact_id: contactId ? Number(contactId) : undefined,
+    unpaid_only: unpaidOnly || undefined,
   } satisfies InvoicesListParams;
   const query = useQuery({
     queryKey: queryKeys.invoices.list(workspaceId ?? "", params),
@@ -232,6 +235,7 @@ function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) 
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">Paid</TableHead>
+              <TableHead className="text-right">Owed</TableHead>
               <TableHead>Receipt</TableHead>
               <TableHead>Due</TableHead>
               <TableHead className="w-10" />
@@ -255,11 +259,31 @@ function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) 
                 <TableCell className="text-right text-muted-foreground">
                   {formatCurrency(invoice.amount_paid, invoice.currency)}
                 </TableCell>
+                <TableCell className="text-right">
+                  {(invoice.balance_due ?? 0) > 0 ? (
+                    <span className="font-medium">
+                      {formatCurrency(invoice.balance_due ?? 0, invoice.currency)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <ReceiptDeliveryCell invoice={invoice} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {invoice.due_date ? formatDate(invoice.due_date) : "—"}
+                  {invoice.due_date ? (
+                    <span className="flex items-center gap-2">
+                      {formatDate(invoice.due_date)}
+                      {/* Lateness is computed per response, so it stays correct
+                          for invoices whose stored status was never refreshed. */}
+                      {invoice.days_overdue ? (
+                        <Badge variant="destructive">{invoice.days_overdue}d late</Badge>
+                      ) : null}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </TableCell>
                 <TableCell>
                   <RowActions
@@ -316,13 +340,46 @@ function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) 
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="invoice-unpaid-filter">Payment</Label>
+          <div className="flex h-9 items-center gap-2">
+            <Switch
+              id="invoice-unpaid-filter"
+              checked={unpaidOnly}
+              onCheckedChange={(checked) => { setUnpaidOnly(checked); reset(); }}
+            />
+            <Label htmlFor="invoice-unpaid-filter" className="font-normal">
+              Unpaid only
+            </Label>
+          </div>
+        </div>
         {hasFilters && (
-          <Button variant="ghost" onClick={() => { setStatusFilter("all"); setContactId(""); reset(); }}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setStatusFilter("all");
+              setContactId("");
+              setUnpaidOnly(false);
+              reset();
+            }}
+          >
             Clear filters
           </Button>
         )}
       </div>
-      <p className="text-sm text-muted-foreground">Newest first. Filters apply across all invoices.</p>
+      <p className="text-sm text-muted-foreground">
+        Newest first. Filters apply across all invoices.
+        {query.isSuccess && (query.data.outstanding_total ?? 0) > 0 ? (
+
+          <>
+            {" "}
+            <span className="font-medium text-foreground">
+              {formatCurrency(query.data.outstanding_total ?? 0)} outstanding
+            </span>{" "}
+            across every matching invoice.
+          </>
+        ) : null}
+      </p>
       {body}
       {query.isSuccess && (
         <ResourceListPagination

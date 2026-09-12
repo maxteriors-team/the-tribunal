@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  useCreateJobInvoice,
   useCreateJobVisit,
   useDeleteJobVisit,
   useJobPricing,
@@ -18,7 +19,9 @@ import {
   useReplaceJobPricing,
   useUpdateJobVisit,
 } from "@/hooks/useJobs";
+import type { JobStatus } from "@/lib/api/jobs";
 import { localToIso } from "@/lib/jobs/job-derivations";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 interface JobVisitsPricingProps {
   workspaceId: string;
@@ -26,6 +29,10 @@ interface JobVisitsPricingProps {
   readOnly?: boolean;
   canViewPricing?: boolean;
   canEditPricing?: boolean;
+  /** Only a completed job can be billed. */
+  jobStatus?: JobStatus;
+  /** Set once the job has been billed; blocks a second invoice. */
+  invoiceId?: string | null;
 }
 
 interface EditableLineItem {
@@ -56,6 +63,8 @@ export function JobVisitsPricing({
   readOnly = false,
   canViewPricing = false,
   canEditPricing = false,
+  jobStatus,
+  invoiceId,
 }: JobVisitsPricingProps) {
   const visitsQuery = useJobVisits(workspaceId, jobId);
   const pricingQuery = useJobPricing(workspaceId, jobId, canViewPricing);
@@ -63,6 +72,7 @@ export function JobVisitsPricing({
   const updateVisit = useUpdateJobVisit(workspaceId, jobId);
   const deleteVisit = useDeleteJobVisit(workspaceId, jobId);
   const replacePricing = useReplaceJobPricing(workspaceId, jobId);
+  const createInvoice = useCreateJobInvoice(workspaceId, jobId);
 
   const [showVisitForm, setShowVisitForm] = useState(false);
   const [visitStart, setVisitStart] = useState("");
@@ -82,6 +92,10 @@ export function JobVisitsPricing({
   const displayedLineItems = lineItems ?? savedLineItems;
   const displayedTaxRate = taxRate ?? String(pricingQuery.data?.tax_rate ?? "0.00");
   const pricingUnedited = lineItems === null && taxRate === null;
+  // The server bills the job's *saved* pricing, so unsaved edits must not be
+  // invoiced -- the operator would get a total that differs from what's on screen.
+  const hasUnsavedPricing = !pricingUnedited;
+  const isCompleted = jobStatus === "completed";
   const calculatedSubtotal = displayedLineItems.reduce(
     (sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0),
     0,
@@ -456,7 +470,7 @@ export function JobVisitsPricing({
                 </dl>
               </div>
               {canEditPricing && (
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
                     type="button"
                     size="sm"
@@ -466,6 +480,53 @@ export function JobVisitsPricing({
                     {replacePricing.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}{" "}
                     Save pricing
                   </Button>
+                  {invoiceId ? (
+                    <p className="text-xs text-muted-foreground">
+                      Invoiced. Manage it from the Invoices page.
+                    </p>
+                  ) : isCompleted ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      // Unsaved edits would not reach the invoice: the server bills
+                      // the job's *saved* pricing, so let them save first rather
+                      // than silently invoicing a stale scope.
+                      disabled={
+                        createInvoice.isPending ||
+                        replacePricing.isPending ||
+                        hasUnsavedPricing ||
+                        displayedLineItems.length === 0
+                      }
+                      title={
+                        hasUnsavedPricing
+                          ? "Save pricing before invoicing"
+                          : displayedLineItems.length === 0
+                            ? "Add a line item before invoicing"
+                            : undefined
+                      }
+                      onClick={() => {
+                        createInvoice.mutate(
+                          {},
+                          {
+                            onSuccess: (invoice) =>
+                              toast.success(`Invoice ${invoice.number} created as a draft`, {
+                                description: "Review and send it from the Invoices page.",
+                              }),
+                            onError: (error: unknown) =>
+                              toast.error(
+                                getApiErrorMessage(error, "Failed to create the invoice"),
+                              ),
+                          },
+                        );
+                      }}
+                    >
+                      {createInvoice.isPending && (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      )}
+                      Create invoice
+                    </Button>
+                  ) : null}
                 </div>
               )}
             </>

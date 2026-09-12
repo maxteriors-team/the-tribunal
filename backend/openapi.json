@@ -23031,6 +23031,11 @@
             "title": "Amount Paid",
             "type": "number"
           },
+          "balance_due": {
+            "default": 0.0,
+            "title": "Balance Due",
+            "type": "number"
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -23061,6 +23066,17 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "days_overdue": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Overdue"
           },
           "discount_amount": {
             "title": "Discount Amount",
@@ -23667,6 +23683,11 @@
             "title": "Amount Paid",
             "type": "number"
           },
+          "balance_due": {
+            "default": 0.0,
+            "title": "Balance Due",
+            "type": "number"
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -23697,6 +23718,17 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "days_overdue": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Overdue"
           },
           "discount_amount": {
             "title": "Discount Amount",
@@ -23871,6 +23903,11 @@
             "title": "Amount Paid",
             "type": "number"
           },
+          "balance_due": {
+            "default": 0.0,
+            "title": "Balance Due",
+            "type": "number"
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -23901,6 +23938,17 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "days_overdue": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Overdue"
           },
           "delivered_to": {
             "anyOf": [
@@ -24828,6 +24876,25 @@
           "completion_confirmation_required"
         ],
         "title": "JobInventoryPlanResponse",
+        "type": "object"
+      },
+      "JobInvoiceCreate": {
+        "description": "Options for billing a completed job.\n\nEverything else (bill-to contact, line items, tax) is copied from the job's\napproved pricing rather than accepted from the client, so the invoice cannot\ndisagree with the scope the operator signed off on.",
+        "properties": {
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          }
+        },
+        "title": "JobInvoiceCreate",
         "type": "object"
       },
       "JobLineItemSummary": {
@@ -36601,6 +36668,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "outstanding_total": {
+            "default": 0.0,
+            "title": "Outstanding Total",
+            "type": "number"
           },
           "page": {
             "title": "Page",
@@ -82361,7 +82433,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/invoices": {
       "get": {
-        "description": "List invoices in a workspace, newest first, with optional filters.",
+        "description": "List invoices in a workspace, newest first, with optional filters.\n\n``unpaid_only`` drives the collections view. It selects on outstanding\namounts rather than on ``status``, which is only refreshed when an invoice is\nedited and so goes stale on exactly the overdue invoices that matter most.",
         "operationId": "list_invoices_api_v1_workspaces__workspace_id__invoices_get",
         "parameters": [
           {
@@ -82404,6 +82476,16 @@
                 }
               ],
               "title": "Contact Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unpaid_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unpaid Only",
+              "type": "boolean"
             }
           },
           {
@@ -84607,6 +84689,75 @@
           }
         ],
         "summary": "Get Job Inventory Plan",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/invoice": {
+      "post": {
+        "description": "Bill a completed job by copying its priced scope onto a draft invoice.\n\nRequires billing write access, like every other money-moving route here.\nReturns 409 when the job is not completed, has no priced scope, or is already\nlinked to an invoice -- the last guard is what stops a double-click, or two\noperators on the same job, from billing the customer twice.",
+        "operationId": "create_invoice_from_job_api_v1_workspaces__workspace_id__jobs__job_id__invoice_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobInvoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Invoice From Job",
         "tags": [
           "Field Service"
         ]

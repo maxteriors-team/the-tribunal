@@ -7,6 +7,7 @@ import {
   type JobCreateRequest,
   type JobCrewList,
   type JobInstallationPlan,
+  type JobInvoiceCreate,
   type JobList,
   type JobListParams,
   type JobPricing,
@@ -109,6 +110,25 @@ export function useReplaceJobPricing(workspaceId: string, jobId: string) {
     mutationFn: (body: JobPricingReplace) => jobsApi.replacePricing(workspaceId, jobId, body),
     onSuccess: (pricing) => {
       queryClient.setQueryData(queryKeys.jobs.pricing(workspaceId, jobId), pricing);
+    },
+  });
+}
+
+/**
+ * Bill a completed job, producing a draft invoice from its priced scope.
+ *
+ * Invalidates the job and invoice caches on success: the job now carries an
+ * `invoice_id` (which is what blocks a second invoice) and the invoice list has
+ * a new row plus a changed outstanding total.
+ */
+export function useCreateJobInvoice(workspaceId: string, jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: JobInvoiceCreate = {}) =>
+      jobsApi.createInvoice(workspaceId, jobId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all(workspaceId) });
     },
   });
 }

@@ -40,6 +40,10 @@ function invoice(overrides: Partial<Invoice> & { id: string }): Invoice {
     discount_amount: 0,
     total: 100,
     amount_paid: 0,
+    // The server always sends this, and an unpaid 100 invoice owes 100. Without
+    // it the Owed cell renders a dash and the due-date assertions below, which
+    // expect a dash for missing dates, would match two cells in the same row.
+    balance_due: 100,
     currency: "USD",
     created_at: "2026-07-30T00:00:00Z",
     updated_at: "2026-07-30T00:00:00Z",
