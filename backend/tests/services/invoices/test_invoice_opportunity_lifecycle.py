@@ -14,6 +14,10 @@ from app.schemas.invoice import InvoiceManualPaymentCreate
 from app.services.invoices.invoice_service import InvoiceService
 from app.services.opportunities.invoice_lifecycle import transition_invoice_opportunity
 
+# Every test here works one pipeline: the deals and the stages they move between
+# all live in it. Shared so a stage fake and an opportunity fake agree by default.
+_PIPELINE_ID = uuid.uuid4()
+
 
 class _Result:
     def __init__(self, value: object | None) -> None:
@@ -67,13 +71,22 @@ def _stage(
     order: int,
     stage_type: str = "active",
     probability: int = 50,
+    pipeline_id: uuid.UUID | None = None,
 ) -> SimpleNamespace:
+    """A stand-in for PipelineStage.
+
+    ``pipeline_id`` is not optional on the real model -- ``move_stage`` reads it
+    to decide whether a stage move is also a *pipeline* move. Every stage in
+    this module belongs to the deal's own pipeline, so it defaults to the same
+    id the fixtures build their opportunities with.
+    """
     return SimpleNamespace(
         id=stage_id,
         name=name,
         order=order,
         stage_type=stage_type,
         probability=probability,
+        pipeline_id=pipeline_id if pipeline_id is not None else _PIPELINE_ID,
     )
 
 
@@ -82,6 +95,7 @@ def _opportunity(
     pipeline_id: uuid.UUID,
     stage_id: uuid.UUID,
 ) -> SimpleNamespace:
+    """A stand-in for Opportunity, filed in ``pipeline_id``."""
     return SimpleNamespace(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
@@ -162,7 +176,7 @@ async def test_unlinked_invoice_never_queries_or_moves_deal() -> None:
 
 async def test_sent_invoice_moves_deal_forward_with_invoice_audit() -> None:
     workspace_id = uuid.uuid4()
-    pipeline_id = uuid.uuid4()
+    pipeline_id = _PIPELINE_ID
     config = _configuration(pipeline_id)
     current = _stage(uuid.uuid4(), "Visit/Demo Scheduled", order=3, probability=30)
     target = _stage(config.quote_follow_up_stage_id, "Quote Follow Up", order=5, probability=60)
@@ -203,7 +217,7 @@ async def test_sent_invoice_moves_deal_forward_with_invoice_audit() -> None:
 
 async def test_paid_invoice_moves_deal_to_won_and_closes_status() -> None:
     workspace_id = uuid.uuid4()
-    pipeline_id = uuid.uuid4()
+    pipeline_id = _PIPELINE_ID
     config = _configuration(pipeline_id)
     current = _stage(uuid.uuid4(), "Quote Follow Up", order=5, probability=60)
     target = _stage(
@@ -249,7 +263,7 @@ async def test_paid_invoice_moves_deal_to_won_and_closes_status() -> None:
 @pytest.mark.parametrize("terminal", ["status", "job_completed", "unqualified"])
 async def test_invoice_transition_never_overwrites_terminal_deal(terminal: str) -> None:
     workspace_id = uuid.uuid4()
-    pipeline_id = uuid.uuid4()
+    pipeline_id = _PIPELINE_ID
     config = _configuration(pipeline_id)
     target = _stage(config.won_stage_id, "Won", order=6, stage_type="won")
     stage_id = uuid.uuid4()
@@ -277,7 +291,7 @@ async def test_invoice_transition_never_overwrites_terminal_deal(terminal: str) 
 
 async def test_sent_invoice_never_reopens_won_stage() -> None:
     workspace_id = uuid.uuid4()
-    pipeline_id = uuid.uuid4()
+    pipeline_id = _PIPELINE_ID
     config = _configuration(pipeline_id)
     target = _stage(config.quote_follow_up_stage_id, "Quote Follow Up", order=5)
     opportunity = _opportunity(workspace_id, pipeline_id, config.won_stage_id)
@@ -298,7 +312,7 @@ async def test_sent_invoice_never_reopens_won_stage() -> None:
 
 async def test_sent_invoice_does_not_drag_a_later_stage_backward() -> None:
     workspace_id = uuid.uuid4()
-    pipeline_id = uuid.uuid4()
+    pipeline_id = _PIPELINE_ID
     config = _configuration(pipeline_id)
     target = _stage(config.quote_follow_up_stage_id, "Quote Follow Up", order=5)
     later = _stage(uuid.uuid4(), "Installation Scheduled", order=6)

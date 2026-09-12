@@ -314,7 +314,14 @@ class OpportunityService:
 
         stage = None
         if opportunity_in.stage_id:
-            stage_query = select(PipelineStage).where(PipelineStage.id == opportunity_in.stage_id)
+            # Must belong to the pipeline validated just above, which is itself
+            # workspace-scoped. Matching on id alone accepted a stage from any
+            # pipeline in any workspace and filed the card under a stage its
+            # own pipeline does not contain.
+            stage_query = select(PipelineStage).where(
+                PipelineStage.id == opportunity_in.stage_id,
+                PipelineStage.pipeline_id == pipeline.id,
+            )
             stage = (await self.db.execute(stage_query)).scalar_one_or_none()
             if not stage:
                 raise NotFoundError("Stage not found")
@@ -468,7 +475,17 @@ class OpportunityService:
         if not stage_id or stage_id == opportunity.stage_id:
             return opportunity
 
-        stage_query = select(PipelineStage).where(PipelineStage.id == stage_id)
+        # Resolve through the parent pipeline so the stage has to belong to
+        # *this* workspace. Loading by id alone let a writing member of one
+        # workspace attach their deal to another tenant's stage, copying that
+        # stage's name into their activity log and its probability onto the
+        # deal. Unknown and foreign raise the same NotFoundError: fail closed,
+        # and do not tell the caller which of the two it was.
+        stage_query = (
+            select(PipelineStage)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .where(PipelineStage.id == stage_id, Pipeline.workspace_id == workspace_id)
+        )
         stage = (await self.db.execute(stage_query)).scalar_one_or_none()
         if not stage:
             raise NotFoundError("Stage not found")
@@ -487,6 +504,29 @@ class OpportunityService:
                 or f"Moved from {old_stage.name if old_stage else 'None'} to {stage.name}",
             )
         )
+
+        # A stage in another pipeline takes the deal with it. Without this the
+        # card keeps its old pipeline_id and renders under a pipeline that does
+        # not contain its stage -- which is why no move control was ever
+        # exposed, and why operators moved people by adding a second card
+        # instead (the duplicate that mis-fired a welcome text on 2026-09-10).
+        if stage.pipeline_id != opportunity.pipeline_id:
+            old_pipeline = await self.db.get(Pipeline, opportunity.pipeline_id)
+            new_pipeline = await self.db.get(Pipeline, stage.pipeline_id)
+            self.db.add(
+                OpportunityActivity(
+                    opportunity_id=opportunity.id,
+                    user_id=user_id,
+                    activity_type="pipeline_changed",
+                    old_value=old_pipeline.name if old_pipeline else "None",
+                    new_value=new_pipeline.name if new_pipeline else "None",
+                    description=(
+                        f"Moved from {old_pipeline.name if old_pipeline else 'None'} "
+                        f"to {new_pipeline.name if new_pipeline else 'None'}"
+                    ),
+                )
+            )
+            opportunity.pipeline_id = stage.pipeline_id
 
         opportunity.stage_id = stage_id
         opportunity.probability = stage.probability

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { OpportunityCard } from "@/components/opportunities/opportunity-card";
-import type { Opportunity, PipelineStage } from "@/types";
+import type { Opportunity, Pipeline, PipelineStage } from "@/types";
 
 const stage: PipelineStage = {
   id: "stage-1",
@@ -42,7 +42,24 @@ const opportunity: Opportunity = {
   updated_at: "2026-08-01T00:00:00Z",
 };
 
-function renderCard(overrides: Partial<Opportunity> = {}) {
+const serviceStage: PipelineStage = {
+  ...stage,
+  id: "service-stage-1",
+  pipeline_id: "pipeline-2",
+  name: "Needs visit",
+};
+
+const servicePipeline: Pipeline = {
+  id: "pipeline-2",
+  workspace_id: "workspace-1",
+  name: "Service",
+  is_active: true,
+  stages: [serviceStage],
+  created_at: "2026-08-01T00:00:00Z",
+  updated_at: "2026-08-01T00:00:00Z",
+};
+
+function renderCard(overrides: Partial<Opportunity> = {}, otherPipelines: Pipeline[] = []) {
   const handlers = {
     onOpen: vi.fn(),
     onMove: vi.fn(),
@@ -57,6 +74,7 @@ function renderCard(overrides: Partial<Opportunity> = {}) {
       <OpportunityCard
         opportunity={{ ...opportunity, ...overrides }}
         stages={[stage]}
+        otherPipelines={otherPipelines}
         {...handlers}
       />
     </DndContext>,
@@ -91,6 +109,25 @@ describe("OpportunityCard", () => {
     expect(onText).toHaveBeenCalledWith(opportunity);
     expect(onSchedule).toHaveBeenCalledWith(opportunity);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("moves a deal to another pipeline's stage without adding a second card", async () => {
+    const user = userEvent.setup();
+    const { onMove } = renderCard({}, [servicePipeline]);
+
+    await user.click(screen.getByRole("button", { name: "Actions for Roof replacement" }));
+    await user.click(screen.getByRole("menuitem", { name: "Needs visit" }));
+
+    expect(onMove).toHaveBeenCalledWith(opportunity.id, serviceStage.id);
+  });
+
+  it("offers no cross-pipeline moves when the workspace has only one pipeline", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Actions for Roof replacement" }));
+
+    expect(screen.queryByText(/^Move to \w/)).not.toBeInTheDocument();
   });
 
   it("disables phone quick actions when the linked contact has no number", () => {
