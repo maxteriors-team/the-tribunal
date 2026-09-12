@@ -57,9 +57,24 @@ def _page(message: str, *, ok: bool) -> HTMLResponse:
     return HTMLResponse(content=html, status_code=200)
 
 
+# Two decorators rather than one ``api_route(methods=["GET", "POST"])``: FastAPI
+# derives an operation id from ``list(route.methods)[0]``, so a multi-method route
+# gets ONE id emitted under both verbs -- a duplicate ``operationId`` in
+# openapi.json, which breaks the generated TypeScript client. And because
+# ``route.methods`` is a set, which verb wins varies per interpreter run, so the
+# generated artifacts stop being reproducible. One decorator per verb keeps both
+# ids distinct and stable.
 @public_router.get("/unsubscribe", response_class=HTMLResponse)
+@public_router.post("/unsubscribe", response_class=HTMLResponse)
 async def unsubscribe(db: DB, token: str = Query(...)) -> HTMLResponse:
-    """Honor an email unsubscribe link. Always returns 200 with an HTML page."""
+    """Honor an email unsubscribe link. Always returns 200 with an HTML page.
+
+    POST is accepted because marketing mail carries ``List-Unsubscribe-Post:
+    List-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL
+    directly, with no human clicking through. A GET-only route answers that POST
+    with 405 and the opt-out is silently lost -- the provider shows the customer
+    a success toast either way, so the failure is invisible from both ends.
+    """
     campaign_contact_id = verify_unsubscribe_token(token)
     if campaign_contact_id is None:
         return _page("This unsubscribe link is invalid or has expired.", ok=False)
@@ -88,11 +103,14 @@ async def unsubscribe(db: DB, token: str = Query(...)) -> HTMLResponse:
 
 
 @public_router.get("/unsubscribe-contact", response_class=HTMLResponse)
+@public_router.post("/unsubscribe-contact", response_class=HTMLResponse)
 async def unsubscribe_contact(db: DB, token: str = Query(...)) -> HTMLResponse:
     """Honor a contact-level email opt-out link (workflow/automation email).
 
     Suppresses commercial email to this person across every automation and
     workflow, not just the one that prompted the click. Always returns 200.
+
+    Accepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.
     """
     contact_id = verify_email_unsubscribe_token(token)
     if contact_id is None:
