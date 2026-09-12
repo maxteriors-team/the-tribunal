@@ -120,10 +120,24 @@ export function OpportunitiesBoard() {
     );
   }
 
-  return <PipelineBoard workspaceId={workspaceId} pipeline={defaultPipeline} />;
+  return (
+    <PipelineBoard
+      workspaceId={workspaceId}
+      pipeline={defaultPipeline}
+      allPipelines={pipelines ?? []}
+    />
+  );
 }
 
-function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipeline: Pipeline }) {
+function PipelineBoard({
+  workspaceId,
+  pipeline,
+  allPipelines,
+}: {
+  workspaceId: string;
+  pipeline: Pipeline;
+  allPipelines: Pipeline[];
+}) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -176,6 +190,14 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
   const stages = useMemo<PipelineStage[]>(
     () => [...pipeline.stages].sort((a, b) => a.order - b.order),
     [pipeline.stages],
+  );
+
+  // Destinations off this board. The list is filtered by pipeline_id, so a deal
+  // moved to one of these leaves the board instead of sitting in a column that
+  // no longer contains it.
+  const otherPipelines = useMemo<Pipeline[]>(
+    () => allPipelines.filter((p) => p.id !== pipeline.id && p.is_active !== false),
+    [allPipelines, pipeline.id],
   );
 
   const listParams = useMemo(
@@ -431,6 +453,7 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
                   key={stage.id}
                   stage={stage}
                   stages={stages}
+                  otherPipelines={otherPipelines}
                   opportunities={byStage.get(stage.id) ?? []}
                   onOpen={openDetail}
                   onAdd={() => openCreate(stage.id)}
@@ -529,6 +552,7 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
 function StageColumn({
   stage,
   stages,
+  otherPipelines,
   opportunities,
   onOpen,
   onAdd,
@@ -540,6 +564,7 @@ function StageColumn({
 }: {
   stage: PipelineStage;
   stages: PipelineStage[];
+  otherPipelines: Pipeline[];
   opportunities: Opportunity[];
   onOpen: (opportunityId: string) => void;
   onAdd: () => void;
@@ -599,6 +624,7 @@ function StageColumn({
               key={opportunity.id}
               opportunity={opportunity}
               stages={stages}
+              otherPipelines={otherPipelines}
               onOpen={onOpen}
               onMove={onMove}
               onCall={onCall}

@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import Link from "next/link";
+import { Fragment } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,11 +36,25 @@ import { contactStatusDotColors, contactStatusLabels } from "@/lib/status-colors
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/number";
 import { formatPhoneNumber } from "@/lib/utils/phone";
-import type { ContactStatus, Opportunity, OpportunityContact, PipelineStage } from "@/types";
+import type {
+  ContactStatus,
+  Opportunity,
+  OpportunityContact,
+  Pipeline,
+  PipelineStage,
+} from "@/types";
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
   stages: PipelineStage[];
+  /**
+   * The workspace's other pipelines, so a deal can leave this board.
+   *
+   * Without this the only way to "move" someone to another pipeline was to add
+   * a second card, and that duplicate is what fired a new-lead welcome text at
+   * an already-quoted customer (2026-09-10).
+   */
+  otherPipelines?: Pipeline[];
   onOpen: (opportunityId: string) => void;
   onMove: (opportunityId: string, stageId: string) => void;
   onCall: (opportunity: Opportunity) => void;
@@ -51,6 +66,7 @@ interface OpportunityCardProps {
 export function OpportunityCard({
   opportunity,
   stages,
+  otherPipelines = [],
   onOpen,
   onMove,
   onCall,
@@ -130,6 +146,24 @@ export function OpportunityCard({
                   {stage.name}
                 </DropdownMenuItem>
               ))}
+            {otherPipelines.map((target) => {
+              const targetStages = [...(target.stages ?? [])].sort((a, b) => a.order - b.order);
+              if (targetStages.length === 0) return null;
+              return (
+                <Fragment key={target.id}>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Move to {target.name}</DropdownMenuLabel>
+                  {targetStages.map((stage) => (
+                    <DropdownMenuItem
+                      key={stage.id}
+                      onClick={() => onMove(opportunity.id, stage.id)}
+                    >
+                      {stage.name}
+                    </DropdownMenuItem>
+                  ))}
+                </Fragment>
+              );
+            })}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => onRemove(opportunity)}>
               Remove from pipeline
